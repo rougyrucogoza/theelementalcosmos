@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Elemental Cosmos</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=IBM+Plex+Mono:wght@300;400;500&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #050510;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-family: 'IBM Plex Mono', monospace;
+    color: #fff;
+  }
+  h1 {
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    font-size: clamp(20px, 3vw, 34px);
+    font-weight: 600;
+    color: rgba(255,255,255,0.9);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    text-align: center;
+    margin-top: 18px;
+  }
+  .subtitle {
+    font-size: clamp(8px, 1.1vw, 11px);
+    color: rgba(255,255,255,0.3);
+    text-align: center;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    margin: 4px 0 8px;
+  }
+  .cosmos-container {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    max-width: 820px;
+    position: relative;
+  }
+  #cosmosSvg { width: 100%; height: auto; display: block; }
+  #cosmosSvg text { user-select: none; pointer-events: none; }
+  .el-node { cursor: pointer; }
+  .el-node .halo { opacity: 0; transition: opacity 0.25s; }
+  .el-node .ring { transition: stroke-width 0.2s; }
+  .el-node:hover .halo { opacity: 0.5; }
+  .el-node:hover .ring { stroke-width: 2.5; }
+  .el-node.dimmed { opacity: 0.1; transition: opacity 0.3s; }
+  .orbit-ring { cursor: pointer; transition: stroke 0.3s; }
+  .orbit-ring:hover { stroke: rgba(255,255,255,0.15) !important; }
+  .orbit-ring.active { stroke: rgba(255,255,255,0.2) !important; stroke-width: 1.4 !important; }
+  .orbit-lbl { cursor: pointer; transition: fill 0.3s; }
+  .orbit-lbl:hover, .orbit-lbl.active { fill: rgba(255,255,255,0.55) !important; }
+  #tooltip {
+    position: fixed; bottom: 76px; left: 50%; transform: translateX(-50%);
+    background: rgba(8,8,28,0.96); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px; padding: 14px 24px; max-width: 440px; width: 90%;
+    text-align: center; backdrop-filter: blur(12px); z-index: 30;
+    pointer-events: none; opacity: 0; transition: opacity 0.2s;
+  }
+  #tooltip.show { opacity: 1; }
+  #tip-sym { font-family: 'Cormorant Garamond', serif; font-size: 30px; font-weight: 700; }
+  #tip-name { font-size: 15px; font-weight: 500; color: rgba(255,255,255,0.9); }
+  #tip-meta { font-size: 10px; color: rgba(255,255,255,0.35); margin-top: 2px; }
+  #tip-trait { font-size: 10px; color: rgba(255,255,255,0.45); font-style: italic; margin: 6px 0 4px; }
+  #tip-hook { font-size: 11px; color: rgba(255,255,255,0.65); line-height: 1.55; }
+  .legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px 12px; padding: 10px 16px 18px; }
+  .legend button {
+    display: flex; align-items: center; gap: 5px; background: transparent;
+    border: 1px solid transparent; border-radius: 4px; padding: 3px 8px;
+    cursor: pointer; font-family: 'IBM Plex Mono', monospace; transition: all 0.2s;
+  }
+  .legend button:hover { background: rgba(255,255,255,0.04); }
+  .legend button.active { border-color: currentColor; background: rgba(255,255,255,0.03); }
+  .legend .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .legend .lbl { font-size: 9px; color: rgba(255,255,255,0.4); letter-spacing: 0.04em; white-space: nowrap; }
+  .legend button.active .lbl { color: inherit; }
+</style>
+</head>
+<body>
+<h1>The Elemental Cosmos</h1>
+<p class="subtitle">Elements arranged by proximity to human life</p>
+<div class="cosmos-container">
+  <svg id="cosmosSvg" viewBox="0 0 800 800" xmlns="http://www.w3.org/2000/svg"></svg>
+</div>
+<div id="tooltip">
+  <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:6px">
+    <span id="tip-sym"></span>
+    <div><div id="tip-name"></div><div id="tip-meta"></div></div>
+  </div>
+  <div id="tip-trait"></div>
+  <div id="tip-hook"></div>
+</div>
+<div class="legend" id="legend"></div>
+
+<script>
+(function() {
+  var CX = 400, CY = 400;
+  var ORBIT_R = [0, 77, 154, 235, 308];
+  var NODE_R  = [22, 18, 16, 15, 15];
+  var FONT_SZ = [15, 12, 11, 10, 10];
+  var Z_SZ    = [6, 5, 5, 5, 5];
+
+  var FAMILIES = {
+    foundation:    { label: "Foundation",               hex: "#F4E04D" },
+    lifeEssential: { label: "Life Essential",           hex: "#4ECDC4" },
+    bioElectrolyte:{ label: "Biology & Electrolytes",   hex: "#45B7D1" },
+    structural:    { label: "Conductive / Structural",  hex: "#F7946B" },
+    technology:    { label: "Technology & Industry",     hex: "#A78BFA" },
+    reactive:      { label: "Reactive & Volatile",      hex: "#F472B6" },
+    medical:       { label: "Medical & Pharmaceutical", hex: "#34D399" },
+    toxic:         { label: "Toxic Yet Transformative",  hex: "#EF4444" }
+  };
+
+  var ORBITS = [
+    { name: "GENESIS CORE", els: [
+      { s:"H",  n:"Hydrogen",   z:1,  f:"foundation",    t:"Highly reactive non-metal",         h:"Most abundant element in the universe — fuel of stars" },
+      { s:"O",  n:"Oxygen",     z:8,  f:"lifeEssential", t:"Gas at room temperature",           h:"Essential for human respiration and medical oxygen therapy" },
+      { s:"C",  n:"Carbon",     z:6,  f:"lifeEssential", t:"Non-metal",                         h:"Forms the backbone of all organic molecules and life on Earth" },
+      { s:"N",  n:"Nitrogen",   z:7,  f:"lifeEssential", t:"Gas at room temperature",           h:"Makes up ~78% of Earth's atmosphere; crucial in fertilizers" }
+    ]},
+    { name: "VITAL RING", els: [
+      { s:"Ca", n:"Calcium",    z:20, f:"bioElectrolyte", t:"Typical ion charge of +2",          h:"Essential for bone and tooth formation" },
+      { s:"Na", n:"Sodium",     z:11, f:"bioElectrolyte", t:"Typical ion charge of +1",          h:"Found in table salt; key role in nerve impulses" },
+      { s:"K",  n:"Potassium",  z:19, f:"bioElectrolyte", t:"High reactivity",                   h:"Important electrolyte regulating heart and muscle function" },
+      { s:"Fe", n:"Iron",       z:26, f:"bioElectrolyte", t:"Good conductor of heat/electricity",h:"Major component of steel; drove the Industrial Revolution" },
+      { s:"Mg", n:"Magnesium",  z:12, f:"medical",        t:"Flammable light metal",             h:"Used in flares, pyrotechnics, and medical supplements" },
+      { s:"Mn", n:"Manganese",  z:25, f:"bioElectrolyte", t:"Transition metal",                  h:"Essential trace mineral for metabolism and bone health" },
+      { s:"Co", n:"Cobalt",     z:27, f:"bioElectrolyte", t:"Transition metal",                  h:"Core of Vitamin B12; used in rechargeable batteries" },
+      { s:"Se", n:"Selenium",   z:34, f:"bioElectrolyte", t:"Non-metal / metalloid",             h:"Essential trace element for thyroid and immune function" },
+      { s:"I",  n:"Iodine",     z:53, f:"reactive",       t:"Crystalline solid halogen",         h:"Essential for thyroid hormones and regulating bodily functions" },
+      { s:"P",  n:"Phosphorus", z:15, f:"medical",        t:"Essential nutrient",                h:"Critical for DNA, ATP, and fertilizers for global food supply" },
+      { s:"S",  n:"Sulfur",     z:16, f:"medical",        t:"Non-metal",                         h:"Key component of early gunpowder; used in pharmaceuticals" },
+      { s:"Zn", n:"Zinc",       z:30, f:"medical",        t:"Protects steel from rust",          h:"Essential trace element; used in wound healing and immunity" }
+    ]},
+    { name: "CIVILIZATION RING", els: [
+      { s:"Cu", n:"Copper",     z:29, f:"structural",  t:"Excellent conductor",                h:"Widely used in electrical wiring and modern infrastructure" },
+      { s:"Si", n:"Silicon",    z:14, f:"technology",  t:"Metalloid",                          h:"Foundation of computer chips and modern digital technology" },
+      { s:"Ti", n:"Titanium",   z:22, f:"structural",  t:"Highly corrosion resistant",         h:"Used in joint replacements due to strength and biocompatibility" },
+      { s:"Au", n:"Gold",       z:79, f:"structural",  t:"Noble metal, excellent conductor",   h:"Symbol of wealth; essential in electronics and aerospace" },
+      { s:"W",  n:"Tungsten",   z:74, f:"structural",  t:"Highest melting point of all metals",h:"Used in light bulb filaments and cutting tools" },
+      { s:"Cr", n:"Chromium",   z:24, f:"structural",  t:"Hard, lustrous transition metal",    h:"Key component of stainless steel and chrome plating" },
+      { s:"Al", n:"Aluminum",   z:13, f:"technology",  t:"Lightweight metal",                  h:"Used in aerospace and modern transport" },
+      { s:"Ag", n:"Silver",     z:47, f:"medical",     t:"Highest electrical conductivity",    h:"Historically used as currency; antimicrobial in medicine" },
+      { s:"Pt", n:"Platinum",   z:78, f:"medical",     t:"Noble metal",                        h:"Used in catalytic converters and chemotherapy drugs" },
+      { s:"Sn", n:"Tin",        z:50, f:"toxic",       t:"Post-transition metal",              h:"Key component of Bronze — defined the Bronze Age" },
+      { s:"Ni", n:"Nickel",     z:28, f:"toxic",       t:"Transition metal",                   h:"Used in stainless steel and rechargeable batteries" },
+      { s:"B",  n:"Boron",      z:5,  f:"foundation",  t:"Metalloid",                          h:"Essential in nuclear shielding and semiconductor doping" },
+      { s:"He", n:"Helium",     z:2,  f:"foundation",  t:"Noble gas",                          h:"Second most abundant element; used in cryogenics and MRI" }
+    ]},
+    { name: "FRONTIER RING", els: [
+      { s:"Li", n:"Lithium",    z:3,  f:"reactive",   t:"Highly reactive alkali metal", h:"Mood stabilizer for psychiatric disorders; powers batteries" },
+      { s:"F",  n:"Fluorine",   z:9,  f:"reactive",   t:"Highly reactive toxic gas",    h:"Used in imaging machines, anesthesia, and toothpaste" },
+      { s:"Cl", n:"Chlorine",   z:17, f:"reactive",   t:"Highly reactive toxic gas",    h:"Used for sanitation of swimming pools and in household bleach" },
+      { s:"Br", n:"Bromine",    z:35, f:"reactive",   t:"Volatile liquid halogen",      h:"Used as fire retardant in furniture, electronics, and textiles" },
+      { s:"Rb", n:"Rubidium",   z:37, f:"reactive",   t:"Ignites in air",               h:"Used in PET scans for medical imaging and scientific research" },
+      { s:"Ba", n:"Barium",     z:56, f:"technology",  t:"Alkaline earth metal",         h:"Used in medical imaging (barium swallows) and drilling fluids" },
+      { s:"Pb", n:"Lead",       z:82, f:"toxic",      t:"Unreactive, poor conductor",   h:"Used in radiation shielding aprons for X-rays" },
+      { s:"Hg", n:"Mercury",    z:80, f:"toxic",      t:"Liquid metal at room temp",    h:"Historically used in thermometers and barometers" }
+    ]},
+    { name: "OUTER VOID", els: [
+      { s:"Cs", n:"Caesium",    z:55, f:"reactive", t:"Liquid near room temp",            h:"Atomic clocks — its vibration frequency defines the second" },
+      { s:"Fr", n:"Francium",   z:87, f:"reactive", t:"Extremely radioactive/unstable",   h:"Used in research on atomic structure and quantum mechanics" },
+      { s:"Ra", n:"Radium",     z:88, f:"toxic",    t:"Highly radioactive",               h:"Deaths of the Radium Girls led to workplace safety laws" }
+    ]}
+  ];
+
+  var NS = "http://www.w3.org/2000/svg";
+  var svg = document.getElementById("cosmosSvg");
+  var tooltip = document.getElementById("tooltip");
+  var activeFamily = null, selectedOrbit = null;
+  var allNodes = [];
+
+  function svgEl(tag, attrs) {
+    var e = document.createElementNS(NS, tag);
+    for (var k in attrs) if (attrs.hasOwnProperty(k)) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+
+  // Background
+  var defs = svgEl("defs", {});
+  var rg = svgEl("radialGradient", { id: "bg" });
+  var s1 = svgEl("stop", { offset: "0%", "stop-color": "#0e0e2a" });
+  var s2 = svgEl("stop", { offset: "100%", "stop-color": "#050510" });
+  rg.appendChild(s1); rg.appendChild(s2); defs.appendChild(rg);
+  var rg2 = svgEl("radialGradient", { id: "glow" });
+  var s3 = svgEl("stop", { offset: "0%", "stop-color": "rgba(244,224,77,0.1)" });
+  var s4 = svgEl("stop", { offset: "100%", "stop-color": "rgba(244,224,77,0)" });
+  rg2.appendChild(s3); rg2.appendChild(s4); defs.appendChild(rg2);
+  svg.appendChild(defs);
+  svg.appendChild(svgEl("rect", { width: 800, height: 800, fill: "url(#bg)", rx: 6 }));
+  svg.appendChild(svgEl("circle", { cx: CX, cy: CY, r: 44, fill: "url(#glow)" }));
+
+  // Orbit rings
+  for (var i = 1; i < ORBIT_R.length; i++) {
+    var attrs = { cx: CX, cy: CY, r: ORBIT_R[i], fill: "none", stroke: "rgba(255,255,255,0.05)", "stroke-width": "0.6", "class": "orbit-ring", "data-orbit": i };
+    if (i === 4) attrs["stroke-dasharray"] = "4,6";
+    var ring = svgEl("circle", attrs);
+    (function(idx) {
+      ring.addEventListener("click", function() { selectedOrbit = selectedOrbit === idx ? null : idx; applyFilters(); });
+    })(i);
+    svg.appendChild(ring);
+  }
+
+  // Orbit labels
+  ORBITS.forEach(function(orb, oi) {
+    var ly = oi === 0 ? CY - ORBIT_R[1] + 14 : CY - ORBIT_R[oi] - 7;
+    var lbl = svgEl("text", { x: CX, y: ly, "text-anchor": "middle", fill: "rgba(255,255,255,0.15)", "font-family": "IBM Plex Mono,monospace", "font-size": "8", "letter-spacing": "2", "class": "orbit-lbl", "data-orbit": oi });
+    lbl.textContent = orb.name;
+    (function(idx) {
+      lbl.addEventListener("click", function() { selectedOrbit = selectedOrbit === idx ? null : idx; applyFilters(); });
+    })(oi);
+    svg.appendChild(lbl);
+  });
+
+  // Core layout offsets
+  var CORE_POS = [ { dx: 0, dy: -28 }, { dx: 28, dy: 8 }, { dx: -28, dy: 8 }, { dx: 0, dy: 30 } ];
+
+  // Draw elements
+  ORBITS.forEach(function(orb, oi) {
+    var r = ORBIT_R[oi];
+    var nr = NODE_R[oi];
+    var fs = FONT_SZ[oi];
+    var zs = Z_SZ[oi];
+
+    orb.els.forEach(function(el, ei) {
+      var x, y;
+      if (oi === 0) {
+        x = CX + CORE_POS[ei].dx;
+        y = CY + CORE_POS[ei].dy;
+      } else {
+        var angle = (2 * Math.PI * ei) / orb.els.length - Math.PI / 2;
+        x = CX + r * Math.cos(angle);
+        y = CY + r * Math.sin(angle);
+      }
+      x = Math.round(x * 10) / 10;
+      y = Math.round(y * 10) / 10;
+
+      var hex = FAMILIES[el.f].hex;
+      var g = svgEl("g", { "class": "el-node", "data-fam": el.f, "data-orbit": oi });
+
+      g.appendChild(svgEl("circle", { cx: x, cy: y, r: nr + 6, fill: "none", stroke: hex, "stroke-width": "0.5", "class": "halo" }));
+      g.appendChild(svgEl("circle", { cx: x, cy: y, r: nr, fill: "rgba(10,10,30,0.85)", stroke: hex, "stroke-width": "1.5", "class": "ring" }));
+
+      var sym = svgEl("text", { x: x, y: y - 2, fill: hex, "font-family": "Cormorant Garamond,Georgia,serif", "font-weight": "700", "font-size": fs, "text-anchor": "middle", "dominant-baseline": "central" });
+      sym.textContent = el.s;
+      g.appendChild(sym);
+
+      var zt = svgEl("text", { x: x, y: y + nr * 0.55, fill: "rgba(255,255,255,0.4)", "font-family": "IBM Plex Mono,monospace", "font-size": zs, "text-anchor": "middle" });
+      zt.textContent = el.z;
+      g.appendChild(zt);
+
+      // Hover events
+      (function(data, color) {
+        g.addEventListener("mouseenter", function() {
+          document.getElementById("tip-sym").textContent = data.s;
+          document.getElementById("tip-sym").style.color = color;
+          document.getElementById("tip-name").textContent = data.n;
+          document.getElementById("tip-meta").textContent = "Z = " + data.z + "  \u00B7  " + FAMILIES[data.f].label;
+          document.getElementById("tip-trait").textContent = data.t;
+          document.getElementById("tip-hook").textContent = data.h;
+          tooltip.style.borderColor = color + "40";
+          tooltip.classList.add("show");
+        });
+        g.addEventListener("mouseleave", function() {
+          tooltip.classList.remove("show");
+        });
+      })(el, hex);
+
+      svg.appendChild(g);
+      allNodes.push(g);
+    });
+  });
+
+  // Legend
+  var legendEl = document.getElementById("legend");
+  Object.keys(FAMILIES).forEach(function(key) {
+    var fam = FAMILIES[key];
+    var btn = document.createElement("button");
+    btn.setAttribute("data-fam", key);
+    btn.style.color = fam.hex;
+    btn.innerHTML = '<span class="dot" style="background:' + fam.hex + '"></span><span class="lbl">' + fam.label + '</span>';
+    btn.addEventListener("click", function() {
+      activeFamily = activeFamily === key ? null : key;
+      applyFilters();
+    });
+    legendEl.appendChild(btn);
+  });
+
+  function applyFilters() {
+    allNodes.forEach(function(g) {
+      var fam = g.getAttribute("data-fam");
+      var orb = parseInt(g.getAttribute("data-orbit"));
+      var dim = (activeFamily && fam !== activeFamily) || (selectedOrbit !== null && orb !== selectedOrbit);
+      if (dim) g.classList.add("dimmed"); else g.classList.remove("dimmed");
+    });
+    document.querySelectorAll(".orbit-ring").forEach(function(r) {
+      var o = parseInt(r.getAttribute("data-orbit"));
+      if (selectedOrbit === o) r.classList.add("active"); else r.classList.remove("active");
+    });
+    document.querySelectorAll(".orbit-lbl").forEach(function(l) {
+      var o = parseInt(l.getAttribute("data-orbit"));
+      if (selectedOrbit === o) l.classList.add("active"); else l.classList.remove("active");
+    });
+    document.querySelectorAll(".legend button").forEach(function(btn) {
+      if (activeFamily === btn.getAttribute("data-fam")) btn.classList.add("active"); else btn.classList.remove("active");
+    });
+  }
+})();
+</script>
+</body>
+</html>
